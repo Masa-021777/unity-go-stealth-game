@@ -13,38 +13,46 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// 定数
-const adminKey = "del123"                // 管理者キー（ランキングリセット用）
+// ---- 定数 ----
+
+const adminKey = "del123"                // ランキングリセット用の管理者キー
 const gameDurationSeconds = 180          // ゲームの制限時間（秒）
-const rankingFilePath = "./ranking.json" // ランキングデータの保存先
+const rankingFilePath = "./ranking.json" // ランキングデータの保存先ファイルパス
 
-// グローバル変数
-var players = make(map[*websocket.Conn]*models.Player)
-var rooms = make(map[string]*models.Room)
-var readyPlayers = make(map[string]map[string]bool)
-var gameTimers = make(map[string]*time.Timer) // ルームID → タイマー
-var gameStarted = make(map[string]time.Time)  // ルームID → ゲーム開始時刻
-var goalPlayers = make(map[string]map[string]bool)
+// ---- グローバル変数 ----
 
-var mutex = &sync.Mutex{}
+var players = make(map[*websocket.Conn]*models.Player) // 接続中の全プレイヤー
+var rooms = make(map[string]*models.Room)              // ルームID → ルームの対応表
+var readyPlayers = make(map[string]map[string]bool)    // ルームIDごとの準備完了プレイヤー一覧
+var gameTimers = make(map[string]*time.Timer)          // ルームID → タイマー（現在未使用）
+var gameStarted = make(map[string]time.Time)           // ルームID → ゲーム開始時刻
+var goalPlayers = make(map[string]map[string]bool)     // ルームIDごとのゴール済みプレイヤー一覧
+
+var mutex = &sync.Mutex{} // グローバル変数へのアクセスを排他制御するMutex
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin: func(r *http.Request) bool { return true }, // 全オリジンからの接続を許可
 }
 
-// ランキングデータの構造体
+// ---- ランキングデータ構造体 ----
+
+// RankingEntry ランキングの1件分のデータ
 type RankingEntry struct {
 	Name         string  `json:"name"`
 	ClearTime    float64 `json:"clear_time"`
 	MissionCount int     `json:"mission_count"`
 }
 
+// RankingData ランキング全体のデータ（JSONファイルに保存する形式）
 type RankingData struct {
 	Rankings []RankingEntry `json:"rankings"`
 }
 
-var rankingMutex = &sync.Mutex{}
+var rankingMutex = &sync.Mutex{} // ランキングファイルの読み書きを排他制御するMutex
 
-// loadRanking ランキングデータをファイルから読み込む
+// ---- ランキング処理 ----
+
+// loadRanking ランキングデータをJSONファイルから読み込む
+// ファイルが存在しない・読み込み失敗の場合は空のデータを返す
 func loadRanking() RankingData {
 	rankingMutex.Lock()
 	defer rankingMutex.Unlock()
@@ -60,22 +68,22 @@ func loadRanking() RankingData {
 	return rd
 }
 
-// saveRanking ランキングデータをファイルに保存する
+// saveRanking ランキングデータをJSONファイルに保存する
 func saveRanking(rd RankingData) {
 	rankingMutex.Lock()
 	defer rankingMutex.Unlock()
 
 	data, err := json.MarshalIndent(rd, "", "  ")
 	if err != nil {
-		fmt.Println("ランキング保存エラー:", err)
+		fmt.Println("[ランキング] 保存エラー:", err)
 		return
 	}
 	if err := os.WriteFile(rankingFilePath, data, 0644); err != nil {
-		fmt.Println("ランキング書き込みエラー:", err)
+		fmt.Println("[ランキング] ファイル書き込みエラー:", err)
 	}
 }
 
-// addRankingEntry スコアを追加してTop3を保持する
+// addRankingEntry スコアを追加してTop3だけ保持する
 // 順位基準: ミッション数が多い → クリアタイムが短い
 func addRankingEntry(entry RankingEntry) {
 	rd := loadRanking()
@@ -92,17 +100,18 @@ func addRankingEntry(entry RankingEntry) {
 		}
 	}
 
-	// Top3だけ保持
+	// Top3だけ保持してファイルに保存
 	if len(rd.Rankings) > 3 {
 		rd.Rankings = rd.Rankings[:3]
 	}
-
 	saveRanking(rd)
 }
 
+// ---- HTTPエンドポイント ----
+
 // HandleRanking ランキングの取得・追加を処理する
-// GET /ranking  → ランキング一覧を返す
-// POST /ranking → スコアを追加する（Unityから呼ぶ）
+// GET  /ranking → ランキング一覧をJSONで返す
+// POST /ranking → スコアを受け取って追加する（Unityから呼ばれる）
 func HandleRanking(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -128,8 +137,8 @@ func HandleRanking(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleRankingReset ランキングをリセットする
-// DELETE /ranking/reset?key=xxx
+// HandleRankingReset ランキングをリセットする（管理者キー必要）
+// DELETE /ranking/reset?key=del123
 // 使い方: curl -X DELETE "http://localhost:8080/ranking/reset?key=del123"
 func HandleRankingReset(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -146,7 +155,7 @@ func HandleRankingReset(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("[ランキング] リセット完了")
 }
 
-// HandleRoomList 現在のルーム一覧と参加人数を返す
+// HandleRoomList 現在のルーム一覧と参加人数をJSONで返す
 // GET /rooms
 func HandleRoomList(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -181,7 +190,9 @@ func HandleRoomList(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
-// IsRoomFull 指定したルームが満員かどうか確認する
+// ---- WebSocket接続処理 ----
+
+// IsRoomFull 指定したルームが満員（2名以上）かどうか確認する
 func IsRoomFull(roomID string) bool {
 	mutex.Lock()
 	defer mutex.Unlock()
@@ -194,26 +205,35 @@ func IsRoomFull(roomID string) bool {
 	return len(room.Clients) >= 2
 }
 
-// HandleConnections 接続を受け付け、プレイヤーをルームに参加させる
+// HandleConnections WebSocket接続を受け付け、プレイヤーをルームに参加させる
+// クエリパラメータ: room_id（参加するルーム）/ name（プレイヤー名）
 func HandleConnections(w http.ResponseWriter, r *http.Request) {
 	roomID := r.URL.Query().Get("room_id")
 	playerName := r.URL.Query().Get("name")
 
+	// 満員チェック
 	if IsRoomFull(roomID) {
 		http.Error(w, "満員です", http.StatusForbidden)
-		return
-	}
-	if roomID == "" || playerName == "" {
-		http.Error(w, "必須パラメータ不足", http.StatusBadRequest)
+		fmt.Printf("[接続拒否] ルーム %s が満員のため %s の接続を拒否\n", roomID, playerName)
 		return
 	}
 
+	// 必須パラメータチェック
+	if roomID == "" || playerName == "" {
+		http.Error(w, "必須パラメータ不足", http.StatusBadRequest)
+		fmt.Println("[接続拒否] room_id または name が空のため拒否")
+		return
+	}
+
+	// WebSocketへのアップグレード
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
+		fmt.Println("[接続エラー] WebSocketへのアップグレード失敗:", err)
 		return
 	}
 	defer ws.Close()
 
+	// プレイヤー情報を生成
 	playerID := uuid.New().String()
 
 	mutex.Lock()
@@ -222,6 +242,7 @@ func HandleConnections(w http.ResponseWriter, r *http.Request) {
 		PositionX: 0, PositionY: 1, PositionZ: 0,
 	}
 	players[ws] = player
+	// ルームが存在しない場合は新規作成
 	room, exists := rooms[roomID]
 	if !exists {
 		room = models.NewRoom()
@@ -231,10 +252,10 @@ func HandleConnections(w http.ResponseWriter, r *http.Request) {
 
 	room.AddPlayer(ws, player)
 
+	// 入室順のプレイヤー番号を設定（1 or 2）
 	room.Mutex.Lock()
 	playerNumber := len(room.Clients)
 	room.Mutex.Unlock()
-
 	player.PlayerNumber = playerNumber
 
 	// 接続したプレイヤーに初期情報を送信
@@ -245,16 +266,19 @@ func HandleConnections(w http.ResponseWriter, r *http.Request) {
 		"rotation":      map[string]float64{"x": 0, "y": 0},
 	})
 
-	// 既存プレイヤーの情報を新規プレイヤーへ通知
+	// 先に入室していたプレイヤーの情報を新規プレイヤーへ送信
 	room.Mutex.Lock()
 	existingPlayers := []interface{}{}
 	for _, p := range room.Clients {
 		if p.ID != playerID {
+			isReady := readyPlayers[roomID] != nil && readyPlayers[roomID][p.ID] // 追加
 			existingPlayers = append(existingPlayers, map[string]interface{}{
-				"id": p.ID, "name": p.Name,
+				"id":            p.ID,
+				"name":          p.Name,
 				"player_number": p.PlayerNumber,
 				"position":      map[string]float64{"x": p.PositionX, "y": p.PositionY, "z": p.PositionZ},
 				"rotation":      map[string]float64{"x": p.RotationX, "y": p.RotationY},
+				"is_ready":      isReady, // 追加
 			})
 		}
 	}
@@ -275,37 +299,46 @@ func HandleConnections(w http.ResponseWriter, r *http.Request) {
 		"type": "existing_players", "players": existingPlayers,
 	})
 
-	fmt.Printf("[ルーム %s] プレイヤー '%s' (ID: %s) が参加。人数: %d\n",
-		roomID, playerName, playerID, len(room.Clients))
+	fmt.Printf("[接続] ルーム %s にプレイヤー '%s'（Player%d）が参加。現在の人数: %d\n",
+		roomID, playerName, playerNumber, len(room.Clients))
 
+	// メッセージ受信ループへ移行
 	handleMessages(ws, player, room)
 }
 
-// handleMessages プレイヤーからのメッセージを受信し、対応した処理を行う
+// ---- メッセージ処理 ----
+
+// handleMessages プレイヤーからのメッセージを受信し、種類に応じた処理を行う
+// 接続が切れるまでループし続ける
 func handleMessages(ws *websocket.Conn, player *models.Player, room *models.Room) {
-	// 切断時の後処理
+	// 切断時のクリーンアップ処理
 	defer func() {
 		room.RemovePlayer(ws)
 		mutex.Lock()
 		delete(players, ws)
+		// 準備完了リストから削除
 		if readyPlayers[player.RoomID] != nil {
 			delete(readyPlayers[player.RoomID], player.ID)
 		}
+		// ゴール済みリストから削除
 		if goalPlayers[player.RoomID] != nil {
 			delete(goalPlayers[player.RoomID], player.ID)
 		}
 		mutex.Unlock()
 
+		// 他のプレイヤーに退室を通知
 		room.BroadcastMessage(map[string]interface{}{
 			"type": "player_left", "id": player.ID, "name": player.Name,
 		})
-		fmt.Printf("[ルーム %s] プレイヤー '%s' が退出。現在の人数: %d\n",
+		fmt.Printf("[退出] ルーム %s からプレイヤー '%s' が退出。現在の人数: %d\n",
 			player.RoomID, player.Name, len(room.Clients))
 	}()
 
 	for {
 		var msg map[string]interface{}
 		if err := ws.ReadJSON(&msg); err != nil {
+			// 接続が切れた場合はループを終了
+			fmt.Printf("[切断] プレイヤー '%s' との接続が切れました\n", player.Name)
 			break
 		}
 
@@ -315,14 +348,16 @@ func handleMessages(ws *websocket.Conn, player *models.Player, room *models.Room
 
 		// 準備完了：全員揃ったらゲームスタート
 		case "ready":
-			fmt.Printf("プレイヤー %s が準備完了\n", player.Name)
+			fmt.Printf("[準備完了] ルーム %s : プレイヤー '%s'\n", player.RoomID, player.Name)
 
+			// プレイヤーの初期位置を保存
 			if pos, ok := msg["position"].(map[string]interface{}); ok {
 				player.PositionX, _ = pos["x"].(float64)
 				player.PositionY, _ = pos["y"].(float64)
 				player.PositionZ, _ = pos["z"].(float64)
 			}
 
+			// 準備完了を全員に通知
 			room.BroadcastMessage(map[string]interface{}{
 				"type": "player_ready", "id": player.ID, "name": player.Name,
 			})
@@ -333,19 +368,22 @@ func handleMessages(ws *websocket.Conn, player *models.Player, room *models.Room
 			}
 			readyPlayers[player.RoomID][player.ID] = true
 
+			// 全員準備完了でゲームスタート
 			if len(readyPlayers[player.RoomID]) >= 2 {
 				room.BroadcastMessage(map[string]interface{}{"type": "start_game"})
 				delete(readyPlayers, player.RoomID)
 
 				// ゲーム開始時刻を記録してタイマーを起動
-				startTime := time.Now()
-				gameStarted[player.RoomID] = startTime
+				gameStarted[player.RoomID] = time.Now()
 				go startGameTimer(room, player.RoomID)
+
+				fmt.Printf("[ゲーム開始] ルーム %s のゲームが開始しました\n", player.RoomID)
 			}
 			mutex.Unlock()
 
 		// プレイヤー移動：座標・動作状態を全員に配信
 		case "player_move":
+			// サーバー側にも座標を保存しておく（existing_players送信時に使用）
 			if pos, ok := msg["position"].(map[string]interface{}); ok {
 				player.PositionX, _ = pos["x"].(float64)
 				player.PositionY, _ = pos["y"].(float64)
@@ -365,7 +403,7 @@ func handleMessages(ws *websocket.Conn, player *models.Player, room *models.Room
 				"anim_trigger": animTrigger,
 			})
 
-		// ゴール：1人目はplayer_goal、2人目でall_goalを配信
+		// ゴール：1人目は待機、2人目全員ゴールで終了
 		case "goal":
 			elapsed := 0.0
 			mutex.Lock()
@@ -380,21 +418,26 @@ func handleMessages(ws *websocket.Conn, player *models.Player, room *models.Room
 			mutex.Unlock()
 
 			if count >= 2 {
+				// 全員ゴール
 				room.BroadcastMessage(map[string]interface{}{
 					"type": "all_goal", "elapsed": elapsed,
 				})
 				mutex.Lock()
 				delete(goalPlayers, player.RoomID)
 				mutex.Unlock()
+				fmt.Printf("[全員ゴール] ルーム %s : 経過時間 %.1f秒\n", player.RoomID, elapsed)
 			} else {
+				// 1人目ゴール
 				room.BroadcastMessage(map[string]interface{}{
 					"type": "player_goal", "id": player.ID, "elapsed": elapsed,
 				})
+				fmt.Printf("[ゴール] ルーム %s : '%s' がゴール (%.1f秒)\n", player.RoomID, player.Name, elapsed)
 			}
 
 		// スイッチ操作：そのまま全員に配信
 		case "switch_activated":
 			room.BroadcastMessage(msg)
+			fmt.Printf("[スイッチ] ルーム %s : '%s' がスイッチを操作\n", player.RoomID, player.Name)
 
 		// アイテム取得：取得プレイヤーIDと対象IDを配信
 		case "item_picked":
@@ -402,15 +445,18 @@ func handleMessages(ws *websocket.Conn, player *models.Player, room *models.Room
 			room.BroadcastMessage(map[string]interface{}{
 				"type": "item_picked", "id": player.ID, "target_id": targetID,
 			})
+			fmt.Printf("[アイテム] ルーム %s : '%s' がアイテムを取得\n", player.RoomID, player.Name)
 
-		// 敵移動：そのまま全員に配信（ホストのみ送信）
+		// 敵移動：そのまま全員に配信（ホスト側のみ送信する想定）
 		case "enemy_move":
 			room.BroadcastMessage(msg)
 
 		// リスポーン：位置情報をそのまま全員に配信
 		case "respawn":
 			room.BroadcastMessage(msg)
+			fmt.Printf("[リスポーン] ルーム %s : '%s' がリスポーン\n", player.RoomID, player.Name)
 
+		// その他（チャット・スタンなど）：送信者情報を付加して全員に配信
 		default:
 			msg["sender_id"] = player.ID
 			msg["sender_name"] = player.Name
@@ -419,7 +465,10 @@ func handleMessages(ws *websocket.Conn, player *models.Player, room *models.Room
 	}
 }
 
+// ---- ゲームタイマー ----
+
 // startGameTimer ゲーム開始後に1秒ごとに残り時間を配信する
+// 残り時間が0になったらタイムアップを通知して終了
 func startGameTimer(room *models.Room, roomID string) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -430,7 +479,7 @@ func startGameTimer(room *models.Room, roomID string) {
 		<-ticker.C
 		remaining--
 
-		// 残り時間を配信
+		// 残り時間を全員に配信
 		room.BroadcastMessage(map[string]interface{}{
 			"type":           "timer_update",
 			"time_remaining": remaining,
@@ -441,8 +490,9 @@ func startGameTimer(room *models.Room, roomID string) {
 			room.BroadcastMessage(map[string]interface{}{
 				"type": "time_up",
 			})
-			fmt.Printf("[ルーム %s] タイムアップ\n", roomID)
+			fmt.Printf("[タイムアップ] ルーム %s\n", roomID)
 
+			// 開始時刻の記録を削除
 			mutex.Lock()
 			delete(gameStarted, roomID)
 			mutex.Unlock()

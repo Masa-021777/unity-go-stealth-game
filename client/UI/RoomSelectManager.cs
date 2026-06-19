@@ -31,6 +31,7 @@ public class RoomSelectManager : MonoBehaviour
 
 	#endregion
 
+
 	#region インスペクター設定
 
 	public string serverBaseUrl = "https://stealth-game-server.onrender.com";
@@ -47,6 +48,8 @@ public class RoomSelectManager : MonoBehaviour
 	[SerializeField] private GameObject roomButton;       // ルーム選択時の初期フォーカス対象
 	[SerializeField] private GameObject readyPanelButton; // 準備パネルの初期フォーカス対象
 
+	[SerializeField] private Button readyButton;
+
 	#endregion
 
 	#region 内部状態
@@ -58,10 +61,25 @@ public class RoomSelectManager : MonoBehaviour
 
 	#region Unityイベント
 
+	void Awake()
+	{
+		/*if (FindObjectsOfType<RoomSelectManager>().Length > 1)
+		{
+			Destroy(gameObject);
+			return;
+		}*/
+	}
+
 	void Start()
 	{
 		wsClient = FindObjectOfType<WebSocketClient>();
 
+		// 準備完了ボタンをコードで登録
+		if (readyButton != null)
+		{
+			readyButton.onClick.RemoveAllListeners();
+			readyButton.onClick.AddListener(() => wsClient.OnReadyButtonClicked());
+		}
 		// 接続先の設定に応じてURLを切り替える
 		switch (wsClient.serverMode)
 		{
@@ -96,6 +114,7 @@ public class RoomSelectManager : MonoBehaviour
 	/// </summary>
 	public void ShowRoomSelect()
 	{
+		if (wsClient == null) wsClient = FindObjectOfType<WebSocketClient>();
 		if (string.IsNullOrEmpty(wsClient.GetPlayerName()))
 		{
 			Debug.LogWarning("名前が入力されていません");
@@ -110,6 +129,7 @@ public class RoomSelectManager : MonoBehaviour
 	/// <summary>退出ボタン押下時に接続を切断して選択画面に戻る</summary>
 	public void OnQuitButtonClicked()
 	{
+		if (wsClient == null) wsClient = FindObjectOfType<WebSocketClient>();
 		wsClient.OnQuitButtonClicked();
 
 		readyPanel.SetActive(false);
@@ -190,6 +210,7 @@ public class RoomSelectManager : MonoBehaviour
 			return;
 		}
 
+		Debug.Log($"ConnectToRoom呼ぶ: {roomId} 名前:{wsClient.GetPlayerName()}");
 		selectedRoomId = roomId;
 		wsClient.ConnectToRoom(roomId);
 

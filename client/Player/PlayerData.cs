@@ -14,6 +14,7 @@ public class PlayerData
 	public int player_number;
 	public PositionData position;
 	public PositionData rotation;
+	public bool is_ready;
 }
 
 // À•WEŒü‚«

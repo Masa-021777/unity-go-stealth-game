@@ -261,7 +261,8 @@ public class PlayerController : MonoBehaviour
 	public void EndMove()
 	{
 		isPlayerMoveStop = false;
-	}
+        Am.SetTrigger("Idle");
+    }
 
 	#endregion
 
@@ -288,18 +289,27 @@ public class PlayerController : MonoBehaviour
 	}
 
 	/// <summary>
-	/// リスポーン演出を開始する
+	/// リスポーン演出を開始する（自分が捕まった本人）
 	/// </summary>
 	public void Respawn()
 	{
 		if (currentRespawnPoint != null)
-			StartCoroutine(RespawnWithEffect());
+			StartCoroutine(RespawnWithEffect(true));
+	}
+
+	/// <summary>
+	/// 相手プレイヤーがつかまったときにサーバーから呼ばれるリスポーン演出（通知なし）
+	/// </summary>
+	public void RespawnWithEffectPublic()
+	{
+		StartCoroutine(RespawnWithEffect(false));
 	}
 
 	/// <summary>
 	/// 画面を暗転させてリスポーン位置に移動し、フェードで復帰する演出
 	/// </summary>
-	private IEnumerator RespawnWithEffect()
+	/// <param name="sendToServer">trueなら自分が捕まった本人としてサーバーに通知する</param>
+	private IEnumerator RespawnWithEffect(bool sendToServer)
 	{
 		// 発見時のテキストを表示
 		if (catchText != null)
@@ -331,8 +341,11 @@ public class PlayerController : MonoBehaviour
 		transform.position = currentRespawnPoint.position;
 		transform.rotation = currentRespawnPoint.rotation;
 
-		var wsClient = FindObjectOfType<WebSocketClient>();
-		if (wsClient != null) wsClient.SendRespawn(transform.position);
+		if (sendToServer)
+		{
+			var wsClient = FindObjectOfType<WebSocketClient>();
+			if (wsClient != null) wsClient.SendRespawn(transform.position);
+		}
 
 		// 敵の警戒度をリセット
 		var enemies = GameObject.FindGameObjectsWithTag("Enemy");
@@ -383,14 +396,6 @@ public class PlayerController : MonoBehaviour
 			c.a = 0f;
 			catchText.color = c;
 		}
-	}
-
-	/// <summary>
-	/// 相手プレイヤーがつかまったときにサーバーから呼ばれるリスポーン演出
-	/// </summary>
-	public void RespawnWithEffectPublic()
-	{
-		StartCoroutine(RespawnWithEffect());
 	}
 
 	private IEnumerator CheckPosition()

@@ -115,6 +115,7 @@ public class MissionManager : MonoBehaviour
 		// ミッション3：敵に見つからずゴール
 		_mission3Done = !_mission3Failed;
 
+
 		RefreshUI();
 		CheckAllClear();
 		Debug.Log($"ゴール 経過: {_elapsedSeconds:F1}秒 ミッション: アイテム={_mission1Done} 時間={_mission2Done} 敵={_mission3Done}");
