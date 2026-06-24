@@ -87,14 +87,12 @@ public class MissionManager : MonoBehaviour
 		_elapsedSeconds = 0f;
 		_timerRunning = true;
 		_isTimeUp = false;
-		Debug.Log("タイムスタート");
 		RefreshUI();
 	}
 
 	/// <summary>アイテム取得通知を受けてフラグを立てる</summary>
 	public void OnItemPicked()
 	{
-		Debug.Log($"OnItemPicked呼ばれた _hasPickedItem: {_hasPickedItem}");
 		if (_hasPickedItem) return;
 		_hasPickedItem = true;
 		RefreshUI();
@@ -118,7 +116,6 @@ public class MissionManager : MonoBehaviour
 
 		RefreshUI();
 		CheckAllClear();
-		Debug.Log($"ゴール 経過: {_elapsedSeconds:F1}秒 ミッション: アイテム={_mission1Done} 時間={_mission2Done} 敵={_mission3Done}");
 	}
 
 	/// <summary>
@@ -129,7 +126,6 @@ public class MissionManager : MonoBehaviour
 	{
 		_mission3Failed = true;
 		RefreshUI();
-		Debug.Log("ミッション3失敗");
 	}
 
 	/// <summary>達成したミッション数を返す</summary>
@@ -159,7 +155,6 @@ public class MissionManager : MonoBehaviour
 	/// <summary>CLEAR!テキストを表示する</summary>
 	public void ShowClearMessage()
 	{
-		Debug.Log($"ShowClearMessage呼ばれた ClearText: {ClearText}");
 		if (ClearText != null)
 		{
 			ClearText.gameObject.SetActive(true);

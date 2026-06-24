@@ -154,7 +154,7 @@ public class RoomSelectManager : MonoBehaviour
 	private IEnumerator ReadyPanel()
 	{
 		yield return new WaitForEndOfFrame();
-		Debug.Log("ˆÚs");
+
 		EventSystem.current.SetSelectedGameObject(readyPanelButton);
 	}
 
@@ -206,11 +206,9 @@ public class RoomSelectManager : MonoBehaviour
 	{
 		if (string.IsNullOrEmpty(wsClient.GetPlayerName()))
 		{
-			Debug.LogWarning("–¼‘O‚ª“ü—Í‚³‚ê‚Ä‚¢‚Ü‚¹‚ñ");
 			return;
 		}
 
-		Debug.Log($"ConnectToRoomŒÄ‚Ô: {roomId} –¼‘O:{wsClient.GetPlayerName()}");
 		selectedRoomId = roomId;
 		wsClient.ConnectToRoom(roomId);
 

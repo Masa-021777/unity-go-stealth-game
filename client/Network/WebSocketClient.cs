@@ -282,10 +282,6 @@ public class WebSocketClient : MonoBehaviour
 	{
 		Application.runInBackground = true;
 		playerName = "";
-		/*websocket = new WebSocket(GetServerUrl("test"));
-		websocket.OnOpen += () => Debug.Log("サーバーに接続");
-		websocket.OnMessage += OnMessageReceived;
-		websocket.OnError += (e) => Debug.Log("エラー: " + e);*/
 	}
 
 	async void Update()
@@ -352,7 +348,6 @@ public class WebSocketClient : MonoBehaviour
 	/// </summary>
 	void OnSceneLoaded(Scene scene, LoadSceneMode mode)
 	{
-		Debug.Log($"OnSceneLoaded: {scene.name}");
 		isGameSceneLoaded = scene.name == "MapTest";
 
 		if (scene.name == "Title")
@@ -377,15 +372,12 @@ public class WebSocketClient : MonoBehaviour
 	/// </summary>
 	public async void ConnectToRoom(string roomId)
 	{
-		Debug.Log("ConnectToRoom開始");
 		var ws = new WebSocket(GetServerUrl(roomId));
 		ws.OnOpen += OnWebSocketOpened;
 		ws.OnMessage += OnMessageReceived;
-		ws.OnError += (e) => Debug.Log($"接続エラー: {e}");
+		//ws.OnError += (e) => Debug.Log($"接続エラー: {e}");
 		websocket = ws;
-		Debug.Log("Connect呼ぶ");
 		await ws.Connect();
-		Debug.Log("Connect完了");
 	}
 
 	/// <summary>プレイヤー名を設定する</summary>
@@ -413,7 +405,6 @@ public class WebSocketClient : MonoBehaviour
 		myId = null;
 		spawnPositions.Clear();
 		pendingMessages.Clear();
-		//Debug.Log("接続を切断しました");
 	}
 
 	private void OnWebSocketOpened() { Debug.Log("接続成功"); }
@@ -423,7 +414,7 @@ public class WebSocketClient : MonoBehaviour
 	/// </summary>
 	public async void OnReadyButtonClicked()
 	{
-		Debug.Log($"準備完了押した websocket={websocket?.State}");
+		//Debug.Log($"準備完了押した websocket={websocket?.State}");
 		if (websocket == null || websocket.State != WebSocketState.Open) return;
 		string json = "{\"type\":\"ready\",\"position\":{\"x\":0,\"y\":1,\"z\":0}}";
 		await websocket.SendText(json);
@@ -460,8 +451,6 @@ public class WebSocketClient : MonoBehaviour
 		_enemyObjects = null;
 		enemyTargetPositions.Clear();
 		enemyTargetAngles.Clear();
-
-		Debug.Log("リセット完了");
 	}
 	#endregion
 
@@ -614,7 +603,7 @@ public class WebSocketClient : MonoBehaviour
 		{
 			TutorialManager.Instance.ShowTutorial(() =>
 			{
-				Debug.Log("ゲームスタート（チュートリアル後）");
+				//Debug.Log("ゲームスタート（チュートリアル後）");
 			});
 		}
 
@@ -1261,7 +1250,6 @@ public class WebSocketClient : MonoBehaviour
 	private void DelayedGameStart()
 	{
 		MissionManager.Instance?.OnGameStart();
-		//Debug.Log("DelayedGameStart: MissionManager.OnGameStart()呼び出し");
 	}
 
 	/// <summary>

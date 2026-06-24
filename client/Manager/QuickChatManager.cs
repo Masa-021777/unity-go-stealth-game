@@ -77,7 +77,6 @@ public class QuickChatManager : MonoBehaviour
 
 		if (gamepadY || keyboardY)
 		{
-			Debug.Log("ƒ`ƒƒƒbƒg—“ŒÄ‚Î‚ê‚½");
 			ToggleChat();
 		}
 	}
